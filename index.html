@@ -1,4 +1,4 @@
-        <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -89,9 +89,9 @@
   </div>
 
   <script>
-    // Firebase Configuration
+    // Corrected Firebase Configuration
     const firebaseConfig = {
-      databaseURL: "https://newvermamedi-default-rtdb.firebaseio.com/"
+      databaseURL: "https://chandrawati-verma-med-default-rtdb.firebaseio.com/"
     };
 
     firebase.initializeApp(firebaseConfig);
@@ -167,7 +167,7 @@
               💬 Send
             </button>
           </div>
-          <div class="ms-t-2 flex gap-4 text-xs font-semibold mt-2 border-t pt-2 border-gray-200">
+          <div class="mt-2 flex gap-4 text-xs font-semibold mt-2 border-t pt-2 border-gray-200">
             <label class="flex items-center gap-1 cursor-pointer">
               <input type="checkbox" ${p.doctorVisited ? 'checked' : ''} onchange="toggleStatus('${id}', 'doctorVisited', this.checked)">
               Doctor Pass Gaya
@@ -186,7 +186,7 @@
       dbRef.child(id).update({ [field]: value });
     }
 
-    // Updated Short WhatsApp Message Format
+    // Short WhatsApp Message Format
     function sendWhatsApp(name, token, reportTime, phone) {
       const message = `Patient Name: ${name}\nToken No: ${token}\nAane Ka Time: ${reportTime}`;
       const encodedMsg = encodeURIComponent(message);
