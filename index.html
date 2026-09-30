@@ -75,12 +75,14 @@
 
     <hr class="my-4 border-amber-200">
 
-    <!-- Header for Patient List -->
-    <div class="flex justify-between items-center mb-2">
-      <h3 class="text-base font-bold text-gray-800">Today's Live Patients</h3>
-      <button onclick="clearTodayData()" class="text-xs text-red-500 hover:underline">Clear List</button>
+    <!-- Header for Patient List with Date Picker -->
+    <div class="mb-3 p-2 bg-amber-100 rounded-lg">
+      <div class="flex justify-between items-center mb-1">
+        <h3 class="text-xs font-bold text-amber-900">Patient History / Date Select Karo:</h3>
+        <button onclick="clearSelectedDateData()" class="text-xs text-red-500 hover:underline">Clear Selected Date</button>
+      </div>
+      <input type="date" id="selectDate" onchange="loadPatientsForDate(this.value)" class="w-full border border-amber-300 rounded p-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white">
     </div>
-    <p id="todayDate" class="text-xs text-gray-400 mb-3"></p>
 
     <!-- Patient List Container -->
     <div id="patientList" class="space-y-3 max-h-[400px] overflow-y-auto pr-1">
@@ -89,16 +91,30 @@
   </div>
 
   <script>
-    // Corrected Firebase Configuration
     const firebaseConfig = {
       databaseURL: "https://chandrawati-verma-med-default-rtdb.firebaseio.com/"
     };
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
-    const dbRef = db.ref('patients');
 
-    document.getElementById('todayDate').innerText = 'Date: ' + new Date().toLocaleDateString('en-GB');
+    // Helper: Get YYYY-MM-DD
+    function getTodayDateString() {
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    let currentSelectedDate = getTodayDateString();
+    let currentListenerRef = null;
+
+    // Set Date Input to Today by default
+    document.getElementById('selectDate').value = currentSelectedDate;
+
+    // Start listening for today's data
+    loadPatientsForDate(currentSelectedDate);
 
     // Add Patient
     document.getElementById('patientForm').addEventListener('submit', function(e) {
@@ -107,6 +123,7 @@
       const total = parseFloat(document.getElementById('totalFee').value) || 0;
       const paid = parseFloat(document.getElementById('paidFee').value) || 0;
       const due = total - paid;
+      const dateKey = getTodayDateString();
 
       const patientData = {
         name: document.getElementById('name').value.trim(),
@@ -122,80 +139,94 @@
         timestamp: Date.now()
       };
 
-      dbRef.push(patientData, function(error) {
+      // Save under patients/YYYY-MM-DD/
+      db.ref(`patients/${dateKey}`).push(patientData, function(error) {
         if (error) {
           alert("Data save nahi ho paya! Error: " + error.message);
         } else {
           document.getElementById('patientForm').reset();
+          // Switch view back to today if adding on today
+          document.getElementById('selectDate').value = dateKey;
+          loadPatientsForDate(dateKey);
         }
       });
     });
 
-    // Realtime Listener
-    dbRef.on('value', (snapshot) => {
-      const listDiv = document.getElementById('patientList');
-      listDiv.innerHTML = '';
+    // Realtime Listener for specific date
+    function loadPatientsForDate(selectedDate) {
+      currentSelectedDate = selectedDate;
 
-      const data = snapshot.val();
-      if (!data) {
-        listDiv.innerHTML = '<p class="text-center text-xs text-gray-400 py-4">Aaj abhi tak koi patient add nahi hai.</p>';
-        return;
+      // Remove old listener
+      if (currentListenerRef) {
+        currentListenerRef.off();
       }
 
-      Object.keys(data).forEach((id) => {
-        const p = data[id];
-        const card = document.createElement('div');
-        card.className = `p-3 rounded-lg border transition ${
-          p.medicineGiven ? 'bg-green-50 border-green-300' :
-          p.doctorVisited ? 'bg-red-50 border-red-300' : 'bg-gray-50 border-gray-200'
-        }`;
+      currentListenerRef = db.ref(`patients/${selectedDate}`);
 
-        const dueBadge = p.dueFee > 0
-          ? `<span class="text-red-600 font-bold">Baaki: ₹${p.dueFee}</span>`
-          : `<span class="text-green-600 font-bold">Paid Full</span>`;
+      currentListenerRef.on('value', (snapshot) => {
+        const listDiv = document.getElementById('patientList');
+        listDiv.innerHTML = '';
 
-        card.innerHTML = `
-          <div class="flex justify-between items-start">
-            <div>
-              <span class="text-sm font-bold text-gray-800">#${p.token} - ${escapeHtml(p.name)}</span>
-              <p class="text-xs text-gray-500">📱 ${p.phone} | 🕒 Doctor: ${p.docTime}</p>
-              <p class="text-xs font-semibold text-amber-700">Aane ka Time: ${escapeHtml(p.reportTime)}</p>
-              <p class="text-xs text-gray-600 mt-1">Total: ₹${p.totalFee} | Jama: ₹${p.paidFee} | ${dueBadge}</p>
+        const data = snapshot.val();
+        if (!data) {
+          listDiv.innerHTML = `<p class="text-center text-xs text-gray-400 py-4">Is date (${selectedDate}) par koi record nahi hai.</p>`;
+          return;
+        }
+
+        Object.keys(data).forEach((id) => {
+          const p = data[id];
+          const card = document.createElement('div');
+          card.className = `p-3 rounded-lg border transition ${
+            p.medicineGiven ? 'bg-green-50 border-green-300' :
+            p.doctorVisited ? 'bg-red-50 border-red-300' : 'bg-gray-50 border-gray-200'
+          }`;
+
+          const dueBadge = p.dueFee > 0
+            ? `<span class="text-red-600 font-bold">Baaki: ₹${p.dueFee}</span>`
+            : `<span class="text-green-600 font-bold">Paid Full</span>`;
+
+          card.innerHTML = `
+            <div class="flex justify-between items-start">
+              <div>
+                <span class="text-sm font-bold text-gray-800">#${p.token} - ${escapeHtml(p.name)}</span>
+                <p class="text-xs text-gray-500">📱 ${p.phone} | 🕒 Doctor: ${p.docTime}</p>
+                <p class="text-xs font-semibold text-amber-700">Aane ka Time: ${escapeHtml(p.reportTime)}</p>
+                <p class="text-xs text-gray-600 mt-1">Total: ₹${p.totalFee} | Jama: ₹${p.paidFee} | ${dueBadge}</p>
+              </div>
+              <button onclick="sendWhatsApp('${escapeHtml(p.name)}', '${p.token}', '${escapeHtml(p.reportTime)}', '${p.phone}')" 
+                      class="bg-green-600 text-white text-xs px-2 py-1 rounded hover:bg-green-700">
+                💬 Send
+              </button>
             </div>
-            <button onclick="sendWhatsApp('${escapeHtml(p.name)}', '${p.token}', '${escapeHtml(p.reportTime)}', '${p.phone}')" 
-                    class="bg-green-600 text-white text-xs px-2 py-1 rounded hover:bg-green-700">
-              💬 Send
-            </button>
-          </div>
-          <div class="mt-2 flex gap-4 text-xs font-semibold mt-2 border-t pt-2 border-gray-200">
-            <label class="flex items-center gap-1 cursor-pointer">
-              <input type="checkbox" ${p.doctorVisited ? 'checked' : ''} onchange="toggleStatus('${id}', 'doctorVisited', this.checked)">
-              Doctor Pass Gaya
-            </label>
-            <label class="flex items-center gap-1 cursor-pointer">
-              <input type="checkbox" ${p.medicineGiven ? 'checked' : ''} onchange="toggleStatus('${id}', 'medicineGiven', this.checked)">
-              Medicine Liya
-            </label>
-          </div>
-        `;
-        listDiv.appendChild(card);
+            <div class="mt-2 flex gap-4 text-xs font-semibold border-t pt-2 border-gray-200">
+              <label class="flex items-center gap-1 cursor-pointer">
+                <input type="checkbox" ${p.doctorVisited ? 'checked' : ''} onchange="toggleStatus('${selectedDate}', '${id}', 'doctorVisited', this.checked)">
+                Doctor Pass Gaya
+              </label>
+              <label class="flex items-center gap-1 cursor-pointer">
+                <input type="checkbox" ${p.medicineGiven ? 'checked' : ''} onchange="toggleStatus('${selectedDate}', '${id}', 'medicineGiven', this.checked)">
+                Medicine Liya
+              </label>
+            </div>
+          `;
+          listDiv.appendChild(card);
+        });
       });
-    });
-
-    function toggleStatus(id, field, value) {
-      dbRef.child(id).update({ [field]: value });
     }
 
-    // Short WhatsApp Message Format
+    function toggleStatus(dateKey, id, field, value) {
+      db.ref(`patients/${dateKey}/${id}`).update({ [field]: value });
+    }
+
     function sendWhatsApp(name, token, reportTime, phone) {
       const message = `Patient Name: ${name}\nToken No: ${token}\nAane Ka Time: ${reportTime}`;
       const encodedMsg = encodeURIComponent(message);
       window.open(`https://wa.me/91${phone}?text=${encodedMsg}`, '_blank');
     }
 
-    function clearTodayData() {
-      if(confirm("Kya aap aaj ka saara live data clear karna chahte hain?")) {
-        dbRef.remove();
+    function clearSelectedDateData() {
+      if(confirm(`Kya aap ${currentSelectedDate} ka saara data delete karna chahte hain?`)) {
+        db.ref(`patients/${currentSelectedDate}`).remove();
       }
     }
 
